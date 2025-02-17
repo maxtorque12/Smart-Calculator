@@ -1,0 +1,478 @@
+package calculator;
+import java.math.BigInteger;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Scanner;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+public class Main {
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+        Calculator calc1=new Calculator(scanner);
+        calc1.serialInput();
+    }
+}
+class CustomArrayList<T> extends ArrayList<T> {
+    public T getLast() {
+        if (isEmpty()) {
+            throw new IndexOutOfBoundsException("The list is empty.");
+        }
+        return get(size() - 1);  // Get the last element
+    }
+    public T removeLast() {
+        if (isEmpty()) {
+            throw new IndexOutOfBoundsException("The list is empty.");
+        }
+        return remove(size() - 1);  // Remove and return the last element
+    }
+}
+class Calculator {
+    Scanner scanner;
+    Character[] operator={'+','-'};
+    Character[] operatorModified={'+','-','*','(',')','/','^'};
+    Map<String,Integer> mapVariables=new HashMap<>();
+    Map<String,BigInteger> mapBigIntegerVariables=new HashMap<>();
+    Calculator(Scanner scanner){
+        this.scanner=scanner;
+    }
+    void serialInput() {
+        while (true) {
+            String str = scanner.nextLine();
+            ArrayList<Regex> regexList = new ArrayList<>();
+            String regex;
+            String checkAssignmentString = "^ *([a-zA-Z]+) *$";
+            Pattern pattern = Pattern.compile(checkAssignmentString);
+            Matcher matcher = pattern.matcher(str);
+            //regex for +9+2-3 equation
+            //regex = "^ *[+\\-]* *[0-9]+ *(?:[+\\-*/^]+ *[0-9]+ *)* *$";
+            //regex="^(?=\\S+)(?:(?: *[+\\-(]* *(?=\\S+)[0-9]*|[a-zA-Z]*)|(?: *(?=\\S+)[0-9]*|[a-zA-Z]*) *(?:(?:[+\\-]+|[/*()]{1}) *(?:[0-9]*|[a-zA-Z]*|[)]*) *)* *)$";
+            if (!matcher.matches()) {
+                regex = "^(?: *[+\\- ()]* *(?:[0-9]+|[a-zA-Z]+) *(?:(?:[+\\- ()]+|(?:[\\/*^ ]{1} *[(]*)) *(?:[0-9]+|[a-zA-Z]+) *[)]* *)* *)$";
+                storeMatcherBoolean(regex, str, regexList);//0
+            }else{
+                regexList.add(new Regex(false,matcher));
+            }
+            //regex for a=5 equation
+            regex = "^ *([a-zA-Z]+) *= *([-]? *[0-9]+) *$";
+            //look ahead term was also matching at=5b8
+            storeMatcherBoolean(regex, str, regexList);//1
+
+            //regex for 'a' equation
+            regex = "^ *([a-zA-Z]+) *$";
+            storeMatcherBoolean(regex, str, regexList);//2
+
+            //regex for a=b equation
+            regex = "^ *([a-zA-Z]+) *= *([a-zA-Z]+) *$";
+            storeMatcherBoolean(regex, str, regexList);//3
+
+            //regex for /exit equation
+            regex = "^ */\\S+ *$";
+            storeMatcherBoolean(regex, str, regexList);//4
+
+            if (regexList.get(0).bool) {
+                Postfix obj1 = new Postfix();
+                if (checkBrackets(str)) {
+                    if(checkIfBigInteger(postfixReady(str))) {
+                        obj1.convertTOPostFix(postfixReady(str));
+                        System.out.println(obj1.evaluateBigIntegerPostfix());
+                    }else {
+                        obj1.convertTOPostFix(postfixReady(str));
+                        System.out.println(obj1.evaluatePostfix());
+                    }
+                } else {
+                    System.out.println("Invalid input");
+                }
+            } else if (regexList.get(1).bool) {//checks for assignment Equation
+                storeEquation(regexList.get(1).matcher);
+            } else if (regexList.get(2).bool) {//checks for variable retrieval
+                String variableName = regexList.get(2).matcher.group(1);
+                if (mapVariables.getOrDefault(regexList.get(2).matcher.group(1), null) != null) {
+                    System.out.println(mapVariables.get(variableName));
+                } else if (mapBigIntegerVariables.getOrDefault(regexList.get(2).matcher.group(1), null) != null) {
+                    System.out.println(mapBigIntegerVariables.get(variableName));
+                } else {
+                    System.out.println("Unknown Variable at retrieve variable");
+                }
+            } else if (regexList.get(3).bool) {//assign a variable to another variable
+                assignVariable(regexList.get(3).matcher);
+            } else if (regexList.get(4).bool) {//check for '/' commands
+                if (str.equals("/exit")) {
+                    System.out.println("Bye!");
+                    break;
+                } else if (str.equals("/help")) {
+                    System.out.println("The program calculates the sum of numbers");
+                } else {
+                    System.out.println("Unknown command");
+                }
+            } else if (str.isEmpty()) {
+
+            } else {
+                System.out.println("Invalid expression");
+            }
+        }
+    }
+    static class  Regex {
+        boolean bool;
+        Matcher matcher;
+        Regex(boolean bool,Matcher matcher){
+            this.bool=bool;
+            this.matcher=matcher;
+        }
+    }
+    boolean checkIfBigInteger(String str){
+        for(int i=0;i<str.length();i++){
+            if(Character.isDigit(str.charAt(i))){
+                StringBuilder temp=new StringBuilder();
+                for(int j=i;j<=str.length();j++){
+                    if (j==str.length()){
+                        i=j-1;
+                        break;
+                    }else if(Character.isDigit(str.charAt(j))){
+                        temp.append(str.charAt(j));
+                    }
+                    else{
+                        i=j-1;
+                        break;
+                    }
+                }
+                try{
+                    int test=Integer.parseInt(temp.toString());
+                }catch (Exception e){
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    void storeMatcherBoolean(String regex,String input,ArrayList<Regex> regexList){
+        Pattern pattern=Pattern.compile(regex);
+        Matcher matcher=pattern.matcher(input);
+        boolean var= matcher.matches();
+        regexList.add(new Regex(var, matcher));
+    }
+    void storeEquation(Matcher matcher){
+        if( !checkIfBigInteger(matcher.group(2)) ) {
+            String variableName = matcher.group(1);
+            Integer num = Integer.parseInt(matcher.group(2));
+            mapVariables.put(variableName, num);
+        }else{
+            String variableName = matcher.group(1);
+            BigInteger num = new BigInteger(matcher.group(2));
+            mapBigIntegerVariables.put(variableName, num);
+        }
+    }
+    void assignVariable(Matcher matcher){
+
+        if (mapVariables.getOrDefault(matcher.group(2), null) != null) {
+            mapVariables.put(matcher.group(1), mapVariables.get(matcher.group(2)));
+
+        } else if (mapBigIntegerVariables.getOrDefault(matcher.group(2), null) != null) {
+            mapBigIntegerVariables.put(matcher.group(1), mapBigIntegerVariables.get(matcher.group(2)));
+
+        } else {
+            System.out.println("Unknown variable at assign variable");
+        }
+    }
+    boolean checkBrackets(String input) {
+        int openBracket=0;
+        int closeBracket=0;
+        for(int i=0;i<input.length();i++){
+            if(input.charAt(i)=='('){
+                openBracket++;
+            }
+            else if(input.charAt(i)==')'){
+                closeBracket++;
+            }
+        }
+        return openBracket == closeBracket;
+    }
+
+    String postfixReady(String stringInput) {
+        StringBuilder stringBuilder = new StringBuilder(stringInput);
+        StringBuilder postfixReady=new StringBuilder();
+        StringBuilder tempBuilder=new StringBuilder();
+        for (int i = 0; i < stringBuilder.length(); i++) {
+            if (Character.isAlphabetic(stringBuilder.charAt(i))) {
+                while(true) {
+                    tempBuilder.append(stringBuilder.charAt(i));
+                    i++;
+                    if(i==stringBuilder.length()) {
+                        break;
+                    }
+                    else if(stringBuilder.charAt(i)== ' '){
+                        break;
+                    }
+                    else if(Arrays.asList(operatorModified).contains(stringBuilder.charAt(i))){
+                        i--;
+                        break;
+                    }
+                }
+                if(mapVariables.getOrDefault(tempBuilder.toString(),null)!=null) {
+                    postfixReady.append(mapVariables.get(tempBuilder.toString()));
+                }
+                else if(mapBigIntegerVariables.getOrDefault(tempBuilder.toString(),null)!=null){
+                    postfixReady.append(mapBigIntegerVariables.get(tempBuilder.toString()));
+                }
+                else{
+                    System.out.println("Unknown Variable at postfix ready");
+                }
+                tempBuilder.setLength(0);
+            }
+            else if(Arrays.asList(operator).contains(stringBuilder.charAt(i))) {
+                //skipping the multiple '+' or '-'.'-' if '+' is even consecutively
+                //'-' if '-' is odd consecutively
+                char tempOperator = stringBuilder.charAt(i);
+                if (tempOperator == '-') {
+                    int minusCount=0;
+                    while (true) {
+                        if (stringBuilder.charAt(i) == '-') {
+                            minusCount++;
+                        }
+                        i++;
+                        if (Character.isDigit(stringBuilder.charAt(i))||Character.isAlphabetic(stringBuilder.charAt(i))||stringBuilder.charAt(i)=='(') {
+                            if(minusCount%2==0){
+                                tempOperator='+';
+                            }
+                            i--;
+                            break;
+                        }
+                    }
+                }
+                else if(tempOperator == '+'){
+                    while (true) {
+                        i++;
+                        if (Character.isDigit(stringBuilder.charAt(i))||Character.isAlphabetic(stringBuilder.charAt(i))) {
+                            i--;
+                            break;
+                        }
+                    }
+                }
+                postfixReady.append(tempOperator);
+            }
+            else{
+                postfixReady.append(stringBuilder.charAt(i));
+            }
+        }
+        return postfixReady.toString();
+    }
+}
+class Postfix{
+    Character[] operators={'+','-','*','/','^'};
+    Character[] brackets={'(',')'};
+    CustomArrayList<Character> convertPostfixStack=new CustomArrayList<>();
+    CustomArrayList<Integer> evalPostfixStack=new CustomArrayList<>();
+    private final StringBuilder postfix=new StringBuilder();
+    CustomArrayList<BigInteger> evalPostfixStackBigInteger=new CustomArrayList<>();
+    String getPostFix(){
+        return postfix.toString();
+    }
+    void resetPostfixStringBuilder(){
+        postfix.setLength(0);
+    }
+    void operatorPrecedenceManager(char varChar){
+        int tempIndex=convertPostfixStack.size();
+        switch (varChar){
+            case '^':
+                if(!convertPostfixStack.isEmpty()){
+                    if(convertPostfixStack.getLast()=='^'){
+                        postfix.append(convertPostfixStack.removeLast());
+                    }
+                }
+                convertPostfixStack.add(varChar);
+                break;
+            case '*','/':
+                for(int i=tempIndex-1;i>=0;i--) {
+                    if(convertPostfixStack.get(i) == '^'||(convertPostfixStack.get(i) == '*' || convertPostfixStack.get(i) == '/')){
+                        postfix.append(convertPostfixStack.removeLast());
+                    }
+                    else{
+                        break;
+                    }
+                }
+                convertPostfixStack.add(varChar);
+                break;
+            case '+','-':
+                for(int i=tempIndex-1;i>=0;i--) {
+                    if (convertPostfixStack.get(i) != '(') {
+                        postfix.append(convertPostfixStack.removeLast());
+                    }
+                    else {
+                        break;
+                    }
+                }
+                convertPostfixStack.add(varChar);
+                break;
+        }
+    }
+    void checkBracket(){
+        int openBracket=-1;
+        int closeBracket=-1;
+        for(int i=0;i<= convertPostfixStack.size()-1;i++){
+            if(convertPostfixStack.get(i)=='('){
+                openBracket=i;
+            }
+            else if(convertPostfixStack.get(i)==')'){
+                closeBracket=i;
+                break;
+            }
+        }
+        if(openBracket!=-1&&closeBracket!=-1){
+            for(int j=openBracket;true;j++){
+                if(convertPostfixStack.get(j)=='('){
+                    convertPostfixStack.remove(j);//when the element is removed from the list,
+                    // the index of elements after that element is reduced by 1
+                    j--;
+                }else if(convertPostfixStack.get(j)==')'){
+                    convertPostfixStack.remove(j);
+                    break;
+                } else {
+                    postfix.append(convertPostfixStack.remove(j));
+                    j--;
+                }
+            }
+        }
+    }
+    void convertTOPostFix(String input){
+        for(int i=0;i<input.length();i++){
+            if(Arrays.asList(operators).contains(input.charAt(i))) {
+                operatorPrecedenceManager(input.charAt(i));
+            }
+            else if(Arrays.asList(brackets).contains(input.charAt(i))){
+                convertPostfixStack.add((input.charAt(i)));
+                checkBracket();
+            }
+            else if(Character.isDigit(input.charAt(i))){
+                int j;
+                boolean flag=true;
+                for(j=i;j<input.length();j++){
+                    if(Character.isDigit(input.charAt(j))) {
+                        postfix.append(input.charAt(j));
+                    }else{
+                        j--;
+                        break;
+                    }
+                }
+                i=j;
+                postfix.append(' ');
+            }
+        }
+        while(!convertPostfixStack.isEmpty()){
+            postfix.append(convertPostfixStack.removeLast());
+        }
+    }
+    BigInteger evaluateBigIntegerPostfix(){
+        BigInteger result=new BigInteger("0");
+        for(int i=0;i<postfix.length();i++){
+            if(Character.isDigit(postfix.charAt(i))){
+                StringBuilder temp=new StringBuilder();
+                for(int j=i;true;j++){
+                    if(Character.isDigit(postfix.charAt(j))){
+                        temp.append(postfix.charAt(j));
+                    }else{
+                        i=j-1;
+                        break;
+                    }
+                }
+                evalPostfixStackBigInteger.add(new BigInteger(temp.toString()));
+            }
+            else if(Arrays.asList(operators).contains(postfix.charAt(i))) {
+                BigInteger temp;
+                if (evalPostfixStackBigInteger.size() > 1) {
+                    switch (postfix.charAt(i)) {
+                        case '*':
+                            temp = evalPostfixStackBigInteger.remove(evalPostfixStackBigInteger.size() - 2).multiply(evalPostfixStackBigInteger.removeLast()) ;
+                            evalPostfixStackBigInteger.add(temp);
+                            break;
+                        case '/':
+                            temp = evalPostfixStackBigInteger.remove(evalPostfixStackBigInteger.size() - 2).divide(evalPostfixStackBigInteger.removeLast()) ;
+                            evalPostfixStackBigInteger.add(temp);
+                            break;
+                        case '+':
+                            temp = evalPostfixStackBigInteger.remove(evalPostfixStackBigInteger.size() - 2).add(evalPostfixStackBigInteger.removeLast());
+                            evalPostfixStackBigInteger.add(temp);
+                            break;
+                        case '-':
+                            temp = evalPostfixStackBigInteger.remove(evalPostfixStackBigInteger.size() - 2).subtract( evalPostfixStackBigInteger.removeLast());
+                            evalPostfixStackBigInteger.add(temp);
+                            break;
+                    }
+                }else{
+                    switch (postfix.charAt(i)) {
+                        case '+':
+                            evalPostfixStackBigInteger.add(evalPostfixStackBigInteger.removeLast());
+                            break;
+                        case '-':
+                            evalPostfixStackBigInteger.add(evalPostfixStackBigInteger.removeLast().multiply(new BigInteger("-1")));
+                            break;
+                    }
+
+                }
+            }
+        }
+        if(!evalPostfixStackBigInteger.isEmpty()) {
+            result = evalPostfixStackBigInteger.getLast();
+        }
+        return result;
+    }
+
+    int evaluatePostfix(){
+        int result=0;
+        for(int i=0;i<postfix.length();i++){
+            if(Character.isDigit(postfix.charAt(i))){
+                StringBuilder temp=new StringBuilder();
+                for(int j=i;true;j++){
+                    if(Character.isDigit(postfix.charAt(j))){
+                        temp.append(postfix.charAt(j));
+                    }else{
+                        i=j-1;
+                        break;
+                    }
+                }
+                evalPostfixStack.add(Integer.parseInt(temp.toString()));
+            }
+            else if(Arrays.asList(operators).contains(postfix.charAt(i))) {
+                int temp = 0;
+                if (evalPostfixStack.size() > 1) {
+                    switch (postfix.charAt(i)) {
+                        case '^':
+                            temp = (int) Math.pow(evalPostfixStack.remove(evalPostfixStack.size() - 2), evalPostfixStack.removeLast());
+                            evalPostfixStack.add(temp);
+                            break;
+                        case '*':
+                            temp = evalPostfixStack.remove(evalPostfixStack.size() - 2) * evalPostfixStack.removeLast();
+                            evalPostfixStack.add(temp);
+                            break;
+                        case '/':
+                            temp = evalPostfixStack.remove(evalPostfixStack.size() - 2) / evalPostfixStack.removeLast();
+                            evalPostfixStack.add(temp);
+                            break;
+                        case '+':
+                            temp = evalPostfixStack.remove(evalPostfixStack.size() - 2) + evalPostfixStack.removeLast();
+                            evalPostfixStack.add(temp);
+                            break;
+                        case '-':
+                            temp = evalPostfixStack.remove(evalPostfixStack.size() - 2) - evalPostfixStack.removeLast();
+                            evalPostfixStack.add(temp);
+                            break;
+                    }
+                }else{
+                    switch (postfix.charAt(i)) {
+                        case '+':
+                            evalPostfixStack.add(evalPostfixStack.removeLast());
+                            break;
+                        case '-':
+                            evalPostfixStack.add(evalPostfixStack.removeLast()*-1);
+                            break;
+                    }
+
+                }
+            }
+        }
+        if(!evalPostfixStack.isEmpty()) {
+            result = evalPostfixStack.getLast();
+        }
+        return result;
+    }
+}
